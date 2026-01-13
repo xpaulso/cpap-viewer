@@ -328,6 +328,13 @@ class CPAPDataLoader {
           eprLevel: day['S.EPR.Level'] || 0,
           maskOn: day['MaskOn'] || 0,
           maskOff: day['MaskOff'] || 0,
+          // SpO2 data (requires oximeter)
+          spo2Avg: day['SpO2.Avg'] || day['SpO2Avg'] || day['SpO2.50'] || 0,
+          spo2Min: day['SpO2.Min'] || day['SpO2Min'] || 0,
+          spo2Max: day['SpO2.Max'] || day['SpO2Max'] || 0,
+          pulseAvg: day['Pulse.Avg'] || day['PulseAvg'] || day['Pulse.50'] || 0,
+          pulseMin: day['Pulse.Min'] || day['PulseMin'] || 0,
+          pulseMax: day['Pulse.Max'] || day['PulseMax'] || 0,
           raw: day
         };
       })

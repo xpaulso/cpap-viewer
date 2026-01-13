@@ -665,6 +665,55 @@
               <canvas id="pressureLeakChart"></canvas>
             </div>
           </div>
+
+          <div class="chart-section">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 12h2l3-9 4 18 3-9h2"/>
+              </svg>
+              Flow Rate (Last 30 Days)
+            </h3>
+            <div class="chart-container">
+              <canvas id="flowRateChart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
+                <path d="M12 2a10 10 0 0 1 10 10"/>
+              </svg>
+              Tidal Volume (Last 30 Days)
+            </h3>
+            <div class="chart-container">
+              <canvas id="tidalVolumeChart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+              SpO2 (Last 30 Days)
+            </h3>
+            <div class="chart-container">
+              <canvas id="spo2Chart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <h3>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+              Pulse Rate (Last 30 Days)
+            </h3>
+            <div class="chart-container">
+              <canvas id="pulseChart"></canvas>
+            </div>
+          </div>
         </div>
 
         <!-- History Tab -->
@@ -680,6 +729,10 @@
                   <th>Pressure</th>
                   <th>Leak (95%)</th>
                   <th>Resp Rate</th>
+                  <th>Flow Rate</th>
+                  <th>Tidal Vol</th>
+                  <th>SpO2</th>
+                  <th>Pulse</th>
                   <th>Events</th>
                 </tr>
               </thead>

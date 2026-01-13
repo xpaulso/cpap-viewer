@@ -5,7 +5,11 @@ let daysToShow = 30; // Default number of days to display
 let charts = {
   ahi: null,
   usage: null,
-  pressureLeak: null
+  pressureLeak: null,
+  flowRate: null,
+  tidalVolume: null,
+  spo2: null,
+  pulse: null
 };
 
 // DOM Elements
@@ -169,10 +173,39 @@ function renderStats(data) {
   const avgPressure = recentDays.length > 0
     ? recentDays.reduce((sum, d) => sum + (d.maskPress95 || d.maskPress50 || 0), 0) / recentDays.length
     : 0;
+  // Average flow rate (minute ventilation) using 95th percentile
+  const avgFlowRate = recentDays.length > 0
+    ? recentDays.reduce((sum, d) => sum + (d.minVent95 || d.minVent50 || 0), 0) / recentDays.length
+    : 0;
+  // Average tidal volume using 95th percentile
+  const avgTidalVolume = recentDays.length > 0
+    ? recentDays.reduce((sum, d) => sum + (d.tidVol95 || d.tidVol50 || 0), 0) / recentDays.length
+    : 0;
+  // Average SpO2 (only if oximeter data available)
+  const daysWithSpO2 = recentDays.filter(d => d.spo2Avg > 0);
+  const avgSpO2 = daysWithSpO2.length > 0
+    ? daysWithSpO2.reduce((sum, d) => sum + d.spo2Avg, 0) / daysWithSpO2.length
+    : 0;
+  // Average Pulse (only if oximeter data available)
+  const daysWithPulse = recentDays.filter(d => d.pulseAvg > 0);
+  const avgPulse = daysWithPulse.length > 0
+    ? daysWithPulse.reduce((sum, d) => sum + d.pulseAvg, 0) / daysWithPulse.length
+    : 0;
 
   const ahiClass = avgAHI < 5 ? 'good' : avgAHI < 15 ? 'warning' : 'bad';
   const usageClass = avgUsage >= 4 ? 'good' : avgUsage >= 2 ? 'warning' : 'bad';
   const leakClass = avgLeak < 24 ? 'good' : avgLeak < 36 ? 'warning' : 'bad';
+  // Flow rate (minute ventilation): 5-10 L/min is normal, <4 or >12 is concerning
+  const flowRateClass = (avgFlowRate >= 5 && avgFlowRate <= 10) ? 'good' :
+                        (avgFlowRate >= 4 && avgFlowRate <= 12) ? 'warning' : 'bad';
+  // Tidal volume: 400-600 mL is normal for adults
+  const tidalVolumeClass = (avgTidalVolume >= 400 && avgTidalVolume <= 600) ? 'good' :
+                           (avgTidalVolume >= 300 && avgTidalVolume <= 700) ? 'warning' : 'bad';
+  // SpO2: 95-100% is normal, 90-94% is concerning, <90% is bad
+  const spo2Class = avgSpO2 >= 95 ? 'good' : avgSpO2 >= 90 ? 'warning' : avgSpO2 > 0 ? 'bad' : '';
+  // Pulse: 60-100 bpm is normal resting heart rate
+  const pulseClass = (avgPulse >= 50 && avgPulse <= 100) ? 'good' :
+                     (avgPulse >= 40 && avgPulse <= 110) ? 'warning' : avgPulse > 0 ? 'bad' : '';
   const daysLabel = daysToShow === 0 ? 'all' : displayDays;
 
   statsGrid.innerHTML = `
@@ -196,6 +229,30 @@ function renderStats(data) {
       <div class="value">${avgLeak.toFixed(1)}<span class="unit">L/min</span></div>
       <div class="subtitle">95th percentile</div>
     </div>
+    <div class="stat-card ${flowRateClass}">
+      <h3>Average Flow Rate</h3>
+      <div class="value">${avgFlowRate.toFixed(1)}<span class="unit">L/min</span></div>
+      <div class="subtitle">95th percentile</div>
+    </div>
+    <div class="stat-card ${tidalVolumeClass}">
+      <h3>Average Tidal Volume</h3>
+      <div class="value">${avgTidalVolume.toFixed(0)}<span class="unit">mL</span></div>
+      <div class="subtitle">95th percentile</div>
+    </div>
+    ${avgSpO2 > 0 ? `
+    <div class="stat-card ${spo2Class}">
+      <h3>Average SpO2</h3>
+      <div class="value">${avgSpO2.toFixed(1)}<span class="unit">%</span></div>
+      <div class="subtitle">${daysWithSpO2.length} days with data</div>
+    </div>
+    ` : ''}
+    ${avgPulse > 0 ? `
+    <div class="stat-card ${pulseClass}">
+      <h3>Average Pulse</h3>
+      <div class="value">${avgPulse.toFixed(0)}<span class="unit">bpm</span></div>
+      <div class="subtitle">${daysWithPulse.length} days with data</div>
+    </div>
+    ` : ''}
     <div class="stat-card">
       <h3>Total Days</h3>
       <div class="value">${data.totalDays}</div>
@@ -207,11 +264,18 @@ function renderStats(data) {
 function renderCharts(dailyStats) {
   // Use selected number of days (0 = all data)
   const numDays = daysToShow === 0 ? dailyStats.length : Math.min(daysToShow, dailyStats.length);
-  const selectedDays = dailyStats.slice(0, numDays).reverse();
+  // Get most recent N days and sort by date ascending (oldest to newest, left to right)
+  const selectedDays = dailyStats.slice(0, numDays).sort((a, b) => {
+    return a.date.localeCompare(b.date);
+  });
 
   const labels = selectedDays.map(d => {
-    const date = new Date(d.date);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // Parse date string manually to avoid timezone issues
+    // d.date format is "YYYY-MM-DD"
+    const [year, month, day] = d.date.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
+    const shortYear = year.toString().slice(-2);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + " '" + shortYear;
   });
 
   // Destroy existing charts
@@ -361,6 +425,194 @@ function renderCharts(dailyStats) {
       }
     }
   });
+
+  // Flow Rate Chart (Minute Ventilation & Respiratory Rate)
+  const frCtx = document.getElementById('flowRateChart').getContext('2d');
+  charts.flowRate = new Chart(frCtx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Minute Ventilation (95%)',
+          data: selectedDays.map(d => d.minVent95),
+          borderColor: '#2ecc71',
+          backgroundColor: 'rgba(46, 204, 113, 0.1)',
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Respiratory Rate (50%)',
+          data: selectedDays.map(d => d.respRate50),
+          borderColor: '#9b59b6',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.3,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          labels: { color: '#a0a0a0' }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#a0a0a0' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          type: 'linear',
+          display: true,
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Minute Ventilation (L/min)',
+            color: '#a0a0a0'
+          },
+          ticks: { color: '#a0a0a0' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y1: {
+          type: 'linear',
+          display: true,
+          position: 'right',
+          title: {
+            display: true,
+            text: 'Resp Rate (/min)',
+            color: '#a0a0a0'
+          },
+          ticks: { color: '#a0a0a0' },
+          grid: { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+
+  // Tidal Volume Chart
+  const tvCtx = document.getElementById('tidalVolumeChart').getContext('2d');
+  charts.tidalVolume = new Chart(tvCtx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Tidal Volume (95%)',
+          data: selectedDays.map(d => d.tidVol95),
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231, 76, 60, 0.1)',
+          fill: true,
+          tension: 0.3
+        },
+        {
+          label: 'Tidal Volume (50%)',
+          data: selectedDays.map(d => d.tidVol50),
+          borderColor: '#c0392b',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.3
+        }
+      ]
+    },
+    options: getChartOptions('Tidal Volume (mL)')
+  });
+
+  // SpO2 Chart
+  const spo2Ctx = document.getElementById('spo2Chart').getContext('2d');
+  const hasSpO2Data = selectedDays.some(d => d.spo2Avg > 0 || d.spo2Min > 0);
+
+  charts.spo2 = new Chart(spo2Ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: hasSpO2Data ? [
+        {
+          label: 'SpO2 Average',
+          data: selectedDays.map(d => d.spo2Avg || null),
+          borderColor: '#3498db',
+          backgroundColor: 'rgba(52, 152, 219, 0.1)',
+          fill: true,
+          tension: 0.3
+        },
+        {
+          label: 'SpO2 Minimum',
+          data: selectedDays.map(d => d.spo2Min || null),
+          borderColor: '#e74c3c',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.3
+        }
+      ] : [{
+        label: 'No SpO2 Data',
+        data: selectedDays.map(() => null),
+        borderColor: '#666',
+        backgroundColor: 'transparent'
+      }]
+    },
+    options: {
+      ...getChartOptions('SpO2 (%)'),
+      scales: {
+        ...getChartOptions('SpO2 (%)').scales,
+        y: {
+          ...getChartOptions('SpO2 (%)').scales.y,
+          min: hasSpO2Data ? 85 : 0,
+          max: hasSpO2Data ? 100 : 100
+        }
+      }
+    }
+  });
+
+  // Pulse Rate Chart
+  const pulseCtx = document.getElementById('pulseChart').getContext('2d');
+  const hasPulseData = selectedDays.some(d => d.pulseAvg > 0 || d.pulseMin > 0);
+
+  charts.pulse = new Chart(pulseCtx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: hasPulseData ? [
+        {
+          label: 'Pulse Average',
+          data: selectedDays.map(d => d.pulseAvg || null),
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231, 76, 60, 0.1)',
+          fill: true,
+          tension: 0.3
+        },
+        {
+          label: 'Pulse Min',
+          data: selectedDays.map(d => d.pulseMin || null),
+          borderColor: '#3498db',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.3
+        },
+        {
+          label: 'Pulse Max',
+          data: selectedDays.map(d => d.pulseMax || null),
+          borderColor: '#e67e22',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.3
+        }
+      ] : [{
+        label: 'No Pulse Data',
+        data: selectedDays.map(() => null),
+        borderColor: '#666',
+        backgroundColor: 'transparent'
+      }]
+    },
+    options: getChartOptions('Pulse Rate (bpm)')
+  });
 }
 
 function getChartOptions(yLabel) {
@@ -408,6 +660,10 @@ function renderHistoryTable(dailyStats) {
         <td>${day.maskPress95.toFixed(1)} cmH2O</td>
         <td>${day.leak95.toFixed(0)} L/min</td>
         <td>${day.respRate50.toFixed(0)} /min</td>
+        <td>${day.minVent95.toFixed(1)} L/min</td>
+        <td>${day.tidVol95.toFixed(0)} mL</td>
+        <td>${day.spo2Avg > 0 ? day.spo2Avg.toFixed(1) + '%' : '-'}</td>
+        <td>${day.pulseAvg > 0 ? day.pulseAvg.toFixed(0) + ' bpm' : '-'}</td>
         <td>
           OA: ${day.oai.toFixed(1)} |
           CA: ${day.cai.toFixed(1)} |
@@ -574,7 +830,10 @@ function getAHIClass(ahi) {
 
 function formatDate(dateStr) {
   if (!dateStr) return 'Unknown';
-  const date = new Date(dateStr);
+  // Parse date string manually to avoid timezone issues
+  // dateStr format is "YYYY-MM-DD"
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day); // month is 0-indexed
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
