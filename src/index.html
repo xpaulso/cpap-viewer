@@ -284,6 +284,62 @@
       background: var(--bg-hover);
     }
 
+    .sessions-table tr.clickable {
+      cursor: pointer;
+    }
+
+    .sessions-table tr.clickable:hover {
+      background: var(--bg-hover);
+      border-left: 3px solid var(--accent-blue);
+    }
+
+    /* Day detail grid */
+    .day-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .day-detail-item {
+      background: var(--bg-primary);
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .day-detail-item label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .day-detail-item .value {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .day-detail-item .unit {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    .day-detail-section {
+      margin-bottom: 24px;
+    }
+
+    .day-detail-section h4 {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
     .sessions-table tr:last-child td {
       border-bottom: none;
     }
@@ -611,7 +667,15 @@
               <option value="180">180 days</option>
               <option value="365">1 year</option>
               <option value="0">All data</option>
+              <option value="custom">Custom range</option>
             </select>
+          </div>
+          <div class="time-input-group" id="dateRangeGroup" style="display: none;">
+            <label for="startDate">From</label>
+            <input type="date" id="startDate" class="time-input" style="width: 140px;">
+            <label for="endDate">To</label>
+            <input type="date" id="endDate" class="time-input" style="width: 140px;">
+            <button class="btn btn-primary" id="applyDateRange">Apply</button>
           </div>
         </div>
 
@@ -769,6 +833,21 @@
         <button class="modal-close" id="closeModal">&times;</button>
       </div>
       <div class="modal-body" id="sessionModalBody">
+        <div class="loading">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Day Detail Modal -->
+  <div class="modal-overlay" id="dayModal">
+    <div class="modal" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2 id="dayModalTitle">Day Details</h2>
+        <button class="modal-close" id="closeDayModal">&times;</button>
+      </div>
+      <div class="modal-body" id="dayModalBody">
         <div class="loading">
           <div class="spinner"></div>
         </div>

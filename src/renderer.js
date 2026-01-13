@@ -2,6 +2,7 @@
 
 let currentData = null;
 let daysToShow = 30; // Default number of days to display
+let customDateRange = null; // { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' } or null
 let charts = {
   ahi: null,
   usage: null,
@@ -25,6 +26,10 @@ const sessionsTableBody = document.getElementById('sessionsTableBody');
 const sessionModal = document.getElementById('sessionModal');
 const sessionModalBody = document.getElementById('sessionModalBody');
 const closeModal = document.getElementById('closeModal');
+const dayModal = document.getElementById('dayModal');
+const dayModalTitle = document.getElementById('dayModalTitle');
+const dayModalBody = document.getElementById('dayModalBody');
+const closeDayModal = document.getElementById('closeDayModal');
 
 // Tab handling
 const tabs = document.querySelectorAll('.tab');
@@ -37,12 +42,17 @@ const dayStartTime = document.getElementById('dayStartTime');
 const dayEndTime = document.getElementById('dayEndTime');
 const applyTimeFilter = document.getElementById('applyTimeFilter');
 const daysToShowSelect = document.getElementById('daysToShow');
+const dateRangeGroup = document.getElementById('dateRangeGroup');
+const startDateInput = document.getElementById('startDate');
+const endDateInput = document.getElementById('endDate');
+const applyDateRangeBtn = document.getElementById('applyDateRange');
 
 // Event Listeners
 openFolderBtn.addEventListener('click', selectDataFolder);
 openFolderBtn2.addEventListener('click', selectDataFolder);
 refreshBtn.addEventListener('click', refreshData);
 closeModal.addEventListener('click', () => sessionModal.classList.remove('active'));
+closeDayModal.addEventListener('click', () => dayModal.classList.remove('active'));
 
 // Time filter handler
 applyTimeFilter.addEventListener('click', async () => {
@@ -68,9 +78,56 @@ applyTimeFilter.addEventListener('click', async () => {
 
 // Days to show selector handler
 daysToShowSelect.addEventListener('change', () => {
-  daysToShow = parseInt(daysToShowSelect.value, 10);
+  const value = daysToShowSelect.value;
+
+  if (value === 'custom') {
+    // Show date range inputs
+    dateRangeGroup.style.display = 'flex';
+    // Set default dates if not set
+    if (currentData && currentData.dailyStats.length > 0) {
+      const stats = currentData.dailyStats;
+      if (!endDateInput.value) {
+        endDateInput.value = stats[0].date; // Most recent
+      }
+      if (!startDateInput.value) {
+        // Default to 30 days before end date
+        const endDate = new Date(endDateInput.value);
+        endDate.setDate(endDate.getDate() - 30);
+        startDateInput.value = endDate.toISOString().split('T')[0];
+      }
+    }
+  } else {
+    // Hide date range inputs and use preset days
+    dateRangeGroup.style.display = 'none';
+    customDateRange = null;
+    daysToShow = parseInt(value, 10);
+    if (currentData) {
+      renderStats(currentData);
+      renderCharts(currentData.dailyStats);
+      renderHistoryTable(currentData.dailyStats);
+    }
+  }
+});
+
+// Apply custom date range handler
+applyDateRangeBtn.addEventListener('click', () => {
+  const startDate = startDateInput.value;
+  const endDate = endDateInput.value;
+
+  if (!startDate || !endDate) {
+    alert('Please select both start and end dates');
+    return;
+  }
+
+  if (startDate > endDate) {
+    alert('Start date must be before end date');
+    return;
+  }
+
+  customDateRange = { start: startDate, end: endDate };
+  daysToShow = -1; // Signal to use custom range
+
   if (currentData) {
-    // Re-render charts and tables with new day count
     renderStats(currentData);
     renderCharts(currentData.dailyStats);
     renderHistoryTable(currentData.dailyStats);
@@ -128,6 +185,22 @@ function showDashboard(data) {
   renderSessionsTable(data.sessions);
 }
 
+/**
+ * Get filtered daily stats based on current selection (days or custom date range)
+ */
+function getFilteredDailyStats(dailyStats) {
+  if (customDateRange) {
+    // Filter by custom date range
+    return dailyStats.filter(d => d.date >= customDateRange.start && d.date <= customDateRange.end);
+  } else if (daysToShow === 0) {
+    // All data
+    return dailyStats;
+  } else {
+    // Most recent N days
+    return dailyStats.slice(0, daysToShow);
+  }
+}
+
 function renderDeviceInfo(info) {
   if (!info || info.error) {
     deviceDetails.innerHTML = '<p>Device information not available</p>';
@@ -156,8 +229,8 @@ function renderDeviceInfo(info) {
 
 function renderStats(data) {
   // Calculate averages based on selected days to show
-  const displayDays = daysToShow === 0 ? data.dailyStats.length : Math.min(daysToShow, data.dailyStats.length);
-  const recentDays = data.dailyStats.slice(0, displayDays);
+  const recentDays = getFilteredDailyStats(data.dailyStats);
+  const displayDays = recentDays.length;
 
   const avgAHI = recentDays.length > 0
     ? recentDays.reduce((sum, d) => sum + (d.ahi || 0), 0) / recentDays.length
@@ -206,7 +279,7 @@ function renderStats(data) {
   // Pulse: 60-100 bpm is normal resting heart rate
   const pulseClass = (avgPulse >= 50 && avgPulse <= 100) ? 'good' :
                      (avgPulse >= 40 && avgPulse <= 110) ? 'warning' : avgPulse > 0 ? 'bad' : '';
-  const daysLabel = daysToShow === 0 ? 'all' : displayDays;
+  const daysLabel = customDateRange ? displayDays : (daysToShow === 0 ? 'all' : displayDays);
 
   statsGrid.innerHTML = `
     <div class="stat-card ${ahiClass}">
@@ -262,10 +335,8 @@ function renderStats(data) {
 }
 
 function renderCharts(dailyStats) {
-  // Use selected number of days (0 = all data)
-  const numDays = daysToShow === 0 ? dailyStats.length : Math.min(daysToShow, dailyStats.length);
-  // Get most recent N days and sort by date ascending (oldest to newest, left to right)
-  const selectedDays = dailyStats.slice(0, numDays).sort((a, b) => {
+  // Get filtered days and sort by date ascending (oldest to newest, left to right)
+  const selectedDays = getFilteredDailyStats(dailyStats).sort((a, b) => {
     return a.date.localeCompare(b.date);
   });
 
@@ -316,7 +387,7 @@ function renderCharts(dailyStats) {
         }
       ]
     },
-    options: getChartOptions('Events per Hour')
+    options: getChartOptions('Events per Hour', selectedDays)
   });
 
   // Usage Chart
@@ -337,9 +408,9 @@ function renderCharts(dailyStats) {
       }]
     },
     options: {
-      ...getChartOptions('Hours'),
+      ...getChartOptions('Hours', selectedDays),
       plugins: {
-        ...getChartOptions('Hours').plugins,
+        ...getChartOptions('Hours', selectedDays).plugins,
         annotation: {
           annotations: {
             line1: {
@@ -387,6 +458,15 @@ function renderCharts(dailyStats) {
       interaction: {
         mode: 'index',
         intersect: false
+      },
+      onClick: (event, elements) => {
+        if (elements.length > 0) {
+          const index = elements[0].index;
+          const day = selectedDays[index];
+          if (day && day.date) {
+            showDayDetail(day.date);
+          }
+        }
       },
       plugins: {
         legend: {
@@ -460,6 +540,15 @@ function renderCharts(dailyStats) {
         mode: 'index',
         intersect: false
       },
+      onClick: (event, elements) => {
+        if (elements.length > 0) {
+          const index = elements[0].index;
+          const day = selectedDays[index];
+          if (day && day.date) {
+            showDayDetail(day.date);
+          }
+        }
+      },
       plugins: {
         legend: {
           labels: { color: '#a0a0a0' }
@@ -523,7 +612,7 @@ function renderCharts(dailyStats) {
         }
       ]
     },
-    options: getChartOptions('Tidal Volume (mL)')
+    options: getChartOptions('Tidal Volume (mL)', selectedDays)
   });
 
   // SpO2 Chart
@@ -559,11 +648,11 @@ function renderCharts(dailyStats) {
       }]
     },
     options: {
-      ...getChartOptions('SpO2 (%)'),
+      ...getChartOptions('SpO2 (%)', selectedDays),
       scales: {
-        ...getChartOptions('SpO2 (%)').scales,
+        ...getChartOptions('SpO2 (%)', selectedDays).scales,
         y: {
-          ...getChartOptions('SpO2 (%)').scales.y,
+          ...getChartOptions('SpO2 (%)', selectedDays).scales.y,
           min: hasSpO2Data ? 85 : 0,
           max: hasSpO2Data ? 100 : 100
         }
@@ -611,17 +700,26 @@ function renderCharts(dailyStats) {
         backgroundColor: 'transparent'
       }]
     },
-    options: getChartOptions('Pulse Rate (bpm)')
+    options: getChartOptions('Pulse Rate (bpm)', selectedDays)
   });
 }
 
-function getChartOptions(yLabel) {
+function getChartOptions(yLabel, selectedDays) {
   return {
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
       mode: 'index',
       intersect: false
+    },
+    onClick: (event, elements) => {
+      if (elements.length > 0 && selectedDays) {
+        const index = elements[0].index;
+        const day = selectedDays[index];
+        if (day && day.date) {
+          showDayDetail(day.date);
+        }
+      }
     },
     plugins: {
       legend: {
@@ -647,13 +745,13 @@ function getChartOptions(yLabel) {
 }
 
 function renderHistoryTable(dailyStats) {
-  // Use selected number of days (0 = all data)
-  const numDays = daysToShow === 0 ? dailyStats.length : Math.min(daysToShow, dailyStats.length);
-  historyTableBody.innerHTML = dailyStats.slice(0, numDays).map(day => {
+  // Get filtered days
+  const filteredDays = getFilteredDailyStats(dailyStats);
+  historyTableBody.innerHTML = filteredDays.map(day => {
     const ahiClass = getAHIClass(day.ahi);
 
     return `
-      <tr>
+      <tr class="clickable" onclick="showDayDetail('${day.date}')">
         <td>${formatDate(day.date)}</td>
         <td><span class="ahi-badge ${ahiClass}">${day.ahi.toFixed(1)}</span></td>
         <td>${day.usageHours.toFixed(1)} hrs</td>
@@ -842,5 +940,187 @@ function formatDate(dateStr) {
   });
 }
 
+/**
+ * Show detailed data for a specific day
+ */
+function showDayDetail(dateStr) {
+  if (!currentData || !currentData.dailyStats) return;
+
+  const day = currentData.dailyStats.find(d => d.date === dateStr);
+  if (!day) return;
+
+  // Parse date for display
+  const [year, month, dayNum] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, dayNum);
+  const formattedDate = date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
+
+  dayModalTitle.textContent = formattedDate;
+  dayModal.classList.add('active');
+
+  const ahiClass = getAHIClass(day.ahi);
+
+  dayModalBody.innerHTML = `
+    <div class="day-detail-section">
+      <h4>Sleep Summary</h4>
+      <div class="day-detail-grid">
+        <div class="day-detail-item">
+          <label>Usage Time</label>
+          <div class="value">${day.usageHours.toFixed(1)}<span class="unit">hours</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>AHI</label>
+          <div class="value"><span class="ahi-badge ${ahiClass}">${day.ahi.toFixed(2)}</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Total Events</label>
+          <div class="value">${((day.ahi || 0) * (day.usageHours || 0)).toFixed(0)}<span class="unit">events</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day-detail-section">
+      <h4>Respiratory Events (per hour)</h4>
+      <div class="day-detail-grid">
+        <div class="day-detail-item">
+          <label>Obstructive Apneas</label>
+          <div class="value">${day.oai.toFixed(2)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Central Apneas</label>
+          <div class="value">${day.cai.toFixed(2)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Hypopneas</label>
+          <div class="value">${day.hi.toFixed(2)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Unclassified Apneas</label>
+          <div class="value">${day.uai.toFixed(2)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Apnea Index</label>
+          <div class="value">${day.ai.toFixed(2)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>CSR</label>
+          <div class="value">${day.csr.toFixed(2)}<span class="unit">%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day-detail-section">
+      <h4>Pressure (cmH2O)</h4>
+      <div class="day-detail-grid">
+        <div class="day-detail-item">
+          <label>Pressure (50%)</label>
+          <div class="value">${day.maskPress50.toFixed(1)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Pressure (95%)</label>
+          <div class="value">${day.maskPress95.toFixed(1)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Max Pressure</label>
+          <div class="value">${day.maxPressure.toFixed(1)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>EPR Level</label>
+          <div class="value">${day.eprLevel}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day-detail-section">
+      <h4>Leak Rate (L/min)</h4>
+      <div class="day-detail-grid">
+        <div class="day-detail-item">
+          <label>Leak (50%)</label>
+          <div class="value">${day.leak50.toFixed(1)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Leak (95%)</label>
+          <div class="value">${day.leak95.toFixed(1)}</div>
+        </div>
+        <div class="day-detail-item">
+          <label>Leak Max</label>
+          <div class="value">${day.leakMax.toFixed(1)}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day-detail-section">
+      <h4>Respiratory Metrics</h4>
+      <div class="day-detail-grid">
+        <div class="day-detail-item">
+          <label>Resp Rate (50%)</label>
+          <div class="value">${day.respRate50.toFixed(1)}<span class="unit">/min</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Resp Rate (95%)</label>
+          <div class="value">${day.respRate95.toFixed(1)}<span class="unit">/min</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Tidal Volume (50%)</label>
+          <div class="value">${day.tidVol50.toFixed(0)}<span class="unit">mL</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Tidal Volume (95%)</label>
+          <div class="value">${day.tidVol95.toFixed(0)}<span class="unit">mL</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Minute Vent (50%)</label>
+          <div class="value">${day.minVent50.toFixed(1)}<span class="unit">L/min</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Minute Vent (95%)</label>
+          <div class="value">${day.minVent95.toFixed(1)}<span class="unit">L/min</span></div>
+        </div>
+      </div>
+    </div>
+
+    ${day.spo2Avg > 0 || day.pulseAvg > 0 ? `
+    <div class="day-detail-section">
+      <h4>Oximetry</h4>
+      <div class="day-detail-grid">
+        ${day.spo2Avg > 0 ? `
+        <div class="day-detail-item">
+          <label>SpO2 Average</label>
+          <div class="value">${day.spo2Avg.toFixed(1)}<span class="unit">%</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>SpO2 Min</label>
+          <div class="value">${day.spo2Min.toFixed(1)}<span class="unit">%</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>SpO2 Max</label>
+          <div class="value">${day.spo2Max.toFixed(1)}<span class="unit">%</span></div>
+        </div>
+        ` : ''}
+        ${day.pulseAvg > 0 ? `
+        <div class="day-detail-item">
+          <label>Pulse Average</label>
+          <div class="value">${day.pulseAvg.toFixed(0)}<span class="unit">bpm</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Pulse Min</label>
+          <div class="value">${day.pulseMin.toFixed(0)}<span class="unit">bpm</span></div>
+        </div>
+        <div class="day-detail-item">
+          <label>Pulse Max</label>
+          <div class="value">${day.pulseMax.toFixed(0)}<span class="unit">bpm</span></div>
+        </div>
+        ` : ''}
+      </div>
+    </div>
+    ` : ''}
+  `;
+}
+
 // Expose viewSession to global scope for onclick handlers
 window.viewSession = viewSession;
+window.showDayDetail = showDayDetail;
